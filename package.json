@@ -1,0 +1,22 @@
+{
+  "name": "je-salon-line-server",
+  "version": "1.0.0",
+  "description": "JE染燙快剪屋 × LINE 通知中繼伺服器",
+  "main": "line-server.js",
+  "scripts": {
+    "start": "node line-server.js",
+    "dev": "nodemon line-server.js"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^9.4.0",
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
