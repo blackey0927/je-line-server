@@ -311,3 +311,4 @@ app.listen(PORT, () => {
   console.log(`  Notify     : ${NOTIFY_TOKEN ? "✓ set" : "✗ not set (optional)"}`);
   console.log(`  OA ID      : ${LINE_OA_ID}`);
 });
+ 
