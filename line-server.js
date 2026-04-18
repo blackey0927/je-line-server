@@ -169,7 +169,7 @@ app.post("/notify", async (req, res) => {
     // 若為 @handle 或一般 ID，需先從 userIdCache 查找
     let lineUserId = null;
 
-    if (/^U[0-9a-f]{32,33}$/i.test(booking.lineId)) {
+    if (/^U[0-9a-zA-Z]{20,}/i.test(booking.lineId)) {
       lineUserId = booking.lineId;
     } else {
       // 嘗試從 cache 反查（依 displayName 或 lineId 對應）
