@@ -15,6 +15,7 @@
 const express = require("express");
 const axios   = require("axios");
 const cors    = require("cors");
+const crypto  = require("crypto");
 const line    = require("@line/bot-sdk");
 const app     = express();
 
@@ -27,7 +28,7 @@ app.use(cors({
 // ── Webhook 路由需要 raw body，其他路由用 json ──────────────
 app.use((req, res, next) => {
   if (req.path === "/webhook") {
-    next();
+    express.raw({ type: "*/*" })(req, res, next); // raw Buffer，供 signature 驗證使用
   } else {
     express.json()(req, res, next);
   }
@@ -215,12 +216,28 @@ app.post("/notify", async (req, res) => {
 });
 
 // ── POST /webhook — 接收 LINE 事件，捕捉 userId ──────────
-app.post(
-  "/webhook",
-  line.middleware({ channelSecret: LINE_SECRET || "" }),
-  async (req, res) => {
-    res.status(200).end(); // 必須先回 200，否則 LINE 會重試
-    const events = req.body.events || [];
+app.post("/webhook", async (req, res) => {
+  // ✅ 必須先回 200，否則 LINE 會判定失敗並重試
+  res.status(200).end();
+
+  try {
+    // 手動驗證 x-line-signature（rawBody 為 Buffer）
+    const signature = req.headers["x-line-signature"];
+    const rawBody   = req.body; // express.raw() 產生的 Buffer
+
+    if (LINE_SECRET && signature) {
+      const hash = crypto
+        .createHmac("sha256", LINE_SECRET)
+        .update(rawBody)
+        .digest("base64");
+      if (hash !== signature) {
+        console.warn("[Webhook] signature 驗證失敗，略過");
+        return;
+      }
+    }
+
+    const body   = JSON.parse(rawBody.toString("utf8"));
+    const events = body.events || [];
 
     for (const event of events) {
       const userId = event.source?.userId;
@@ -257,8 +274,11 @@ app.post(
         }
       }
     }
+  } catch (e) {
+    // 不 throw！res 已回了 200，這裡只記錄 log
+    console.error("[Webhook Error]", e.message);
   }
-);
+});
 
 // ── GET /health — Railway 健康檢查 ───────────────────────
 app.get("/health", (_req, res) => {
