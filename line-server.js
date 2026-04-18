@@ -1,14 +1,16 @@
 /**
  * line-server.js
- * JE??敹怠撅?? LINE ?銝剔匱隡箸??? * ?函蔡??Railway ??https://railway.app
+ * JE染燙快剪屋 × LINE 通知中繼伺服器
+ * 部署至 Railway → https://railway.app
  *
- * ?啣?霈嚗 Railway Dashboard ??Variables 閮剖?嚗?
+ * 環境變數（在 Railway Dashboard → Variables 設定）：
  *   LINE_CHANNEL_ACCESS_TOKEN  LINE OA Channel Access Token
  *   LINE_CHANNEL_SECRET        LINE OA Channel Secret
- *   LINE_NOTIFY_TOKEN          LINE Notify Token嚗?銝餃?嚗憛恬?
- *   LINE_OA_ID                 摰撣唾?ID嚗?憒?@658qpvwi
- *   ALLOWED_ORIGIN             ?垢蝬脣?嚗?憒?https://je-booking.vercel.app
- *   PORT                       Railway ?芸?瘜典嚗????憛? */
+ *   LINE_NOTIFY_TOKEN          LINE Notify Token（店主即時通知，選填）
+ *   LINE_OA_ID                 官方帳號ID，例如 @658qpvwi
+ *   ALLOWED_ORIGIN             前端網址，例如 https://je-booking.vercel.app
+ *   PORT                       Railway 自動注入，不需手動填
+ */
 
 const express = require("express");
 const axios   = require("axios");
@@ -17,16 +19,16 @@ const crypto  = require("crypto");
 const line    = require("@line/bot-sdk");
 const app     = express();
 
-// ?? CORS ??????????????????????????????????????????????????
+// ── CORS ──────────────────────────────────────────────────
 app.use(cors({
   origin: process.env.ALLOWED_ORIGIN || "*",
   methods: ["POST", "GET", "OPTIONS"],
 }));
 
-// ?? Webhook 頝舐?閬?raw body嚗隞楝?梁 json ??????????????
+// ── Webhook 路由需要 raw body，其他路由用 json ──────────────
 app.use((req, res, next) => {
   if (req.path === "/webhook") {
-    express.raw({ type: "*/*" })(req, res, next); // raw Buffer嚗? signature 撽?雿輻
+    express.raw({ type: "*/*" })(req, res, next); // raw Buffer，供 signature 驗證使用
   } else {
     express.json()(req, res, next);
   }
@@ -38,33 +40,33 @@ const LINE_SECRET  = process.env.LINE_CHANNEL_SECRET;
 const NOTIFY_TOKEN = process.env.LINE_NOTIFY_TOKEN;
 const LINE_OA_ID   = process.env.LINE_OA_ID || "@658qpvwi";
 
-// ?? userId ?怠?嚗???皜征嚗迤撘?寧 Firebase嚗?????????
+// ── userId 暫存（重啟後清空，正式可改用 Firebase）─────────
 const userIdCache = {};
 
-// ?? Flex Message ?璅⊥ ?????????????????????????????????
+// ── Flex Message 通知模板 ─────────────────────────────────
 function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcPrice, salonName) {
   const STATUS_MAP = {
-    confirm:  { label: "????蝣箄?",     color: "#06C755", alt: "?函???撌脩Ⅱ隤? },
-    reminder: { label: "??????",     color: "#c8a97e", alt: "?????" },
-    cancel:   { label: "???????", color: "#e05050", alt: "??撌脣?瘨? },
-    test:     { label: "?? 皜祈岫?",     color: "#7a9aaa", alt: "?皜祈岫閮" },
+    confirm:  { label: "✅ 預約確認",     color: "#06C755", alt: "您的預約已確認" },
+    reminder: { label: "⏰ 預約提醒",     color: "#c8a97e", alt: "明日預約提醒" },
+    cancel:   { label: "❌ 預約取消通知", color: "#e05050", alt: "預約已取消" },
+    test:     { label: "🔔 測試通知",     color: "#7a9aaa", alt: "這是測試訊息" },
   };
   const st = STATUS_MAP[type] || STATUS_MAP.confirm;
 
   const rows = [
-    ["???", `${svcName}嚗?{svcDuration}??嚗],
-    ["閮剛?撣?,   stylistName],
-    ["???交?", booking.date],
-    ["????", booking.time],
-    ["鞎餌",     svcPrice || "??],
-    ...(booking.notes ? [["?釣", booking.notes]] : []),
+    ["服務項目", `${svcName}（${svcDuration}分鐘）`],
+    ["設計師",   stylistName],
+    ["預約日期", booking.date],
+    ["預約時間", booking.time],
+    ["費用",     svcPrice || "—"],
+    ...(booking.notes ? [["備注", booking.notes]] : []),
   ];
 
   const footerMsg = type === "cancel"
-    ? "憒????嚗?暺銝??"
+    ? "如需重新預約，請點選下方按鈕"
     : type === "reminder"
-    ? "?隢??摨????函??唬? ??"
-    : "???∪翰?箸??嚗?隞颱???隢蝜急???;
+    ? "明日請準時到店，期待您的到來 🙏"
+    : "我們將盡快為您服務，有任何問題請聯繫我們";
 
   return {
     type: "flex",
@@ -78,7 +80,7 @@ function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcP
         backgroundColor: "#0d0b08",
         paddingAll: "14px",
         contents: [
-          { type: "text", text: salonName || "JE??敹怠撅?, size: "xxs", color: "#7a6a5a", flex: 1 },
+          { type: "text", text: salonName || "JE染燙快剪屋", size: "xxs", color: "#7a6a5a", flex: 1 },
           { type: "text", text: st.label, size: "sm", color: st.color, align: "end", weight: "bold" },
         ],
       },
@@ -116,7 +118,7 @@ function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcP
             height: "sm",
             action: {
               type: "uri",
-              label: type === "cancel" ? "???" : "?亦?????",
+              label: type === "cancel" ? "重新預約" : "查看我的預約",
               uri: `https://line.me/R/ti/p/${LINE_OA_ID}`,
             },
           },
@@ -126,17 +128,17 @@ function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcP
   };
 }
 
-// ?? LINE Notify 摨蜓? ??????????????????????????????????
+// ── LINE Notify 店主通知 ──────────────────────────────────
 async function notifyOwner(type, booking, svcName, stylistName) {
   if (!NOTIFY_TOKEN) return;
-  const icon = { confirm: "??", reminder: "??, cancel: "??, test: "??" }[type] || "??";
-  const typeLabel = { confirm: "??蝣箄?撌脩??, reminder: "??撌脩??, cancel: "???撌脩??, test: "皜祈岫?" }[type] || "?";
+  const icon = { confirm: "📌", reminder: "⏰", cancel: "❌", test: "🔔" }[type] || "📌";
+  const typeLabel = { confirm: "預約確認已發送", reminder: "提醒已發送", cancel: "取消通知已發送", test: "測試通知" }[type] || "通知";
   const msg = [
     `\n${icon} ${typeLabel}`,
-    `憿批恥嚗?{booking.customerName}嚗?{booking.customerPhone}嚗,
-    `??嚗?{svcName} 嚗?${stylistName}`,
-    `??嚗?{booking.date} ${booking.time}`,
-    ...(booking.lineId ? [`LINE嚗?{booking.lineId}`] : []),
+    `顧客：${booking.customerName}（${booking.customerPhone}）`,
+    `服務：${svcName} ／ ${stylistName}`,
+    `時間：${booking.date} ${booking.time}`,
+    ...(booking.lineId ? [`LINE：${booking.lineId}`] : []),
   ].join("\n");
 
   await axios.post(
@@ -151,26 +153,27 @@ async function notifyOwner(type, booking, svcName, stylistName) {
   );
 }
 
-// ?? POST /notify ???潮蝯阡“摰?????????????????????????
+// ── POST /notify — 發送通知給顧客 ────────────────────────
 app.post("/notify", async (req, res) => {
-  const { type = "confirm", booking, svcName = "??, stylistName = "??, svcDuration = "??, svcPrice = "??, salonName = "JE??敹怠撅? } = req.body || {};
+  const { type = "confirm", booking, svcName = "—", stylistName = "—", svcDuration = "—", svcPrice = "—", salonName = "JE染燙快剪屋" } = req.body || {};
 
-  if (!booking) return res.status(400).json({ ok: false, msg: "蝻箏? booking 鞈?" });
-  if (!LINE_TOKEN) return res.status(500).json({ ok: false, msg: "隡箸??冽閮剖? LINE_CHANNEL_ACCESS_TOKEN" });
+  if (!booking) return res.status(400).json({ ok: false, msg: "缺少 booking 資料" });
+  if (!LINE_TOKEN) return res.status(500).json({ ok: false, msg: "伺服器未設定 LINE_CHANNEL_ACCESS_TOKEN" });
 
   const errors = [];
   let pushSent = false;
 
-  // ?? Push Flex Message 蝯阡“摰???
+  // ── Push Flex Message 給顧客 ──
   if (booking.lineId) {
-    // lineId ?亦 U ? 32 摮?? userId嚗?湔?冽
-    // ?亦 @handle ????ID嚗??? userIdCache ?交
+    // lineId 若為 U 開頭 32 字元則為 userId，可直接推播
+    // 若為 @handle 或一般 ID，需先從 userIdCache 查找
     let lineUserId = null;
 
     if (/^U[0-9a-f]{32,33}$/i.test(booking.lineId)) {
       lineUserId = booking.lineId;
     } else {
-      // ?岫敺?cache ?嚗? displayName ??lineId 撠?嚗?      const found = Object.entries(userIdCache).find(([, v]) =>
+      // 嘗試從 cache 反查（依 displayName 或 lineId 對應）
+      const found = Object.entries(userIdCache).find(([, v]) =>
         v.lineId === booking.lineId || v.displayName === booking.lineId
       );
       if (found) lineUserId = found[0];
@@ -189,37 +192,38 @@ app.post("/notify", async (req, res) => {
         pushSent = true;
       } catch (e) {
         const errMsg = e.response?.data?.message || e.message;
-        errors.push(`Push 憭望?: ${errMsg}`);
+        errors.push(`Push 失敗: ${errMsg}`);
         console.error("[Push Error]", errMsg);
       }
     } else {
-      errors.push(`lineId??{booking.lineId}?? userId ?澆?嚗?撘?憿批恥?摰撣唾?敺撓?乓閰Ｘ???蝝?敺?userId`);
+      errors.push(`lineId「${booking.lineId}」非 userId 格式，請引導顧客加入官方帳號後輸入「查詢我的預約」取得 userId`);
     }
   }
 
-  // ?? Notify 摨蜓 ??
+  // ── Notify 店主 ──
   try {
     await notifyOwner(type, booking, svcName, stylistName);
   } catch (e) {
-    errors.push(`摨蜓?憭望?: ${e.message}`);
+    errors.push(`店主通知失敗: ${e.message}`);
     console.error("[Notify Error]", e.message);
   }
 
   return res.json({
     ok: errors.length === 0 || pushSent,
     pushSent,
-    msg: errors.length > 0 ? errors.join(" / ") : "?撌脩??,
+    msg: errors.length > 0 ? errors.join(" / ") : "通知已發送",
   });
 });
 
-// ?? POST /webhook ???交 LINE 鈭辣嚗???userId ??????????
+// ── POST /webhook — 接收 LINE 事件，捕捉 userId ──────────
 app.post("/webhook", async (req, res) => {
-  // ??敹??? 200嚗??LINE ?摰仃?蒂?岫
+  // ✅ 必須先回 200，否則 LINE 會判定失敗並重試
   res.status(200).end();
 
   try {
-    // ??撽? x-line-signature嚗awBody ??Buffer嚗?    const signature = req.headers["x-line-signature"];
-    const rawBody   = req.body; // express.raw() ?Ｙ???Buffer
+    // 手動驗證 x-line-signature（rawBody 為 Buffer）
+    const signature = req.headers["x-line-signature"];
+    const rawBody   = req.body; // express.raw() 產生的 Buffer
 
     if (LINE_SECRET && signature) {
       const hash = crypto
@@ -227,7 +231,7 @@ app.post("/webhook", async (req, res) => {
         .update(rawBody)
         .digest("base64");
       if (hash !== signature) {
-        console.warn("[Webhook] signature 撽?憭望?嚗??);
+        console.warn("[Webhook] signature 驗證失敗，略過");
         return;
       }
     }
@@ -239,7 +243,7 @@ app.post("/webhook", async (req, res) => {
       const userId = event.source?.userId;
       if (!userId) continue;
 
-      // ??銝血摮?profile
+      // 取得並儲存 profile
       try {
         const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: LINE_TOKEN });
         const profile = await client.getProfile(userId);
@@ -254,14 +258,15 @@ app.post("/webhook", async (req, res) => {
         console.error("[Profile Error]", e.message);
       }
 
-      // ???閰Ｘ???蝝?隞?      if (event.type === "message" && event.message?.type === "text" && event.message.text === "?亥岷????") {
+      // 回應「查詢我的預約」指令
+      if (event.type === "message" && event.message?.type === "text" && event.message.text === "查詢我的預約") {
         try {
           const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: LINE_TOKEN });
           await client.replyMessage({
             replyToken: event.replyToken,
             messages: [{
               type: "text",
-              text: `?函? LINE userId嚗n${userId}\n\n隢?甇?ID ??蝯血?摰塚??喳?交???冽??n\n??隢?敺嚗nhttps://je-booking.vercel.app`,
+              text: `您的 LINE userId：\n${userId}\n\n請將此 ID 提供給店家，即可接收預約推播通知。\n\n預約請前往：\nhttps://je-booking.vercel.app`,
             }],
           });
         } catch (e) {
@@ -270,16 +275,16 @@ app.post("/webhook", async (req, res) => {
       }
     }
   } catch (e) {
-    // 銝?throw嚗es 撌脣?鈭?200嚗ㄐ?芾???log
+    // 不 throw！res 已回了 200，這裡只記錄 log
     console.error("[Webhook Error]", e.message);
   }
 });
 
-// ?? GET /health ??Railway ?亙熒瑼Ｘ ???????????????????????
+// ── GET /health — Railway 健康檢查 ───────────────────────
 app.get("/health", (_req, res) => {
   res.json({
     status:          "ok",
-    salonName:       "JE??敹怠撅?,
+    salonName:       "JE染燙快剪屋",
     lineOaId:        LINE_OA_ID,
     hasLineToken:    !!LINE_TOKEN,
     hasLineSecret:   !!LINE_SECRET,
@@ -289,7 +294,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ?? GET /users ???亥岷撌脫??? userId ?” ???????????????
+// ── GET /users — 查詢已捕捉的 userId 列表 ───────────────
 app.get("/users", (_req, res) => {
   res.json({
     count: Object.keys(userIdCache).length,
@@ -297,12 +302,12 @@ app.get("/users", (_req, res) => {
   });
 });
 
-// ?? ?? ?????????????????????????????????????????????????
+// ── 啟動 ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`[JE line-server] running on port ${PORT}`);
-  console.log(`  LINE Token : ${LINE_TOKEN ? "??set" : "??missing"}`);
-  console.log(`  LINE Secret: ${LINE_SECRET ? "??set" : "??missing"}`);
-  console.log(`  Notify     : ${NOTIFY_TOKEN ? "??set" : "??not set (optional)"}`);
+  console.log(`  LINE Token : ${LINE_TOKEN ? "✓ set" : "✗ missing"}`);
+  console.log(`  LINE Secret: ${LINE_SECRET ? "✓ set" : "✗ missing"}`);
+  console.log(`  Notify     : ${NOTIFY_TOKEN ? "✓ set" : "✗ not set (optional)"}`);
   console.log(`  OA ID      : ${LINE_OA_ID}`);
 });
