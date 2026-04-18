@@ -1,16 +1,14 @@
 /**
  * line-server.js
- * JEæŸ“ç‡™å¿«å‰ªå±‹ Ã— LINE é€šçŸ¥ä¸­ç¹¼ä¼ºæœå™¨
- * éƒ¨ç½²è‡³ Railway â†’ https://railway.app
+ * JE?“ç?å¿«å‰ªå±?? LINE ?šçŸ¥ä¸­ç¹¼ä¼ºæ??? * ?¨ç½²??Railway ??https://railway.app
  *
- * ç’°å¢ƒè®Šæ•¸ï¼ˆåœ¨ Railway Dashboard â†’ Variables è¨­å®šï¼‰ï¼š
+ * ?°å?è®Šæ•¸ï¼ˆåœ¨ Railway Dashboard ??Variables è¨­å?ï¼‰ï?
  *   LINE_CHANNEL_ACCESS_TOKEN  LINE OA Channel Access Token
  *   LINE_CHANNEL_SECRET        LINE OA Channel Secret
- *   LINE_NOTIFY_TOKEN          LINE Notify Tokenï¼ˆåº—ä¸»å³æ™‚é€šçŸ¥ï¼Œé¸å¡«ï¼‰
- *   LINE_OA_ID                 å®˜æ–¹å¸³è™ŸIDï¼Œä¾‹å¦‚ @658qpvwi
- *   ALLOWED_ORIGIN             å‰ç«¯ç¶²å€ï¼Œä¾‹å¦‚ https://je-booking.vercel.app
- *   PORT                       Railway è‡ªå‹•æ³¨å…¥ï¼Œä¸éœ€æ‰‹å‹•å¡«
- */
+ *   LINE_NOTIFY_TOKEN          LINE Notify Tokenï¼ˆå?ä¸»å³?‚é€šçŸ¥ï¼Œé¸å¡«ï?
+ *   LINE_OA_ID                 å®˜æ–¹å¸³è?IDï¼Œä?å¦?@658qpvwi
+ *   ALLOWED_ORIGIN             ?ç«¯ç¶²å?ï¼Œä?å¦?https://je-booking.vercel.app
+ *   PORT                       Railway ?ªå?æ³¨å…¥ï¼Œä??€?‹å?å¡? */
 
 const express = require("express");
 const axios   = require("axios");
@@ -19,16 +17,16 @@ const crypto  = require("crypto");
 const line    = require("@line/bot-sdk");
 const app     = express();
 
-// â”€â”€ CORS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ CORS ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 app.use(cors({
   origin: process.env.ALLOWED_ORIGIN || "*",
   methods: ["POST", "GET", "OPTIONS"],
 }));
 
-// â”€â”€ Webhook è·¯ç”±éœ€è¦ raw bodyï¼Œå…¶ä»–è·¯ç”±ç”¨ json â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ Webhook è·¯ç”±?€è¦?raw bodyï¼Œå…¶ä»–è·¯?±ç”¨ json ?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 app.use((req, res, next) => {
   if (req.path === "/webhook") {
-    express.raw({ type: "*/*" })(req, res, next); // raw Bufferï¼Œä¾› signature é©—è­‰ä½¿ç”¨
+    express.raw({ type: "*/*" })(req, res, next); // raw Bufferï¼Œä? signature é©—è?ä½¿ç”¨
   } else {
     express.json()(req, res, next);
   }
@@ -40,33 +38,33 @@ const LINE_SECRET  = process.env.LINE_CHANNEL_SECRET;
 const NOTIFY_TOKEN = process.env.LINE_NOTIFY_TOKEN;
 const LINE_OA_ID   = process.env.LINE_OA_ID || "@658qpvwi";
 
-// â”€â”€ userId æš«å­˜ï¼ˆé‡å•Ÿå¾Œæ¸…ç©ºï¼Œæ­£å¼å¯æ”¹ç”¨ Firebaseï¼‰â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ userId ?«å?ï¼ˆé??Ÿå?æ¸…ç©ºï¼Œæ­£å¼å¯?¹ç”¨ Firebaseï¼‰â??€?€?€?€?€?€?€?€
 const userIdCache = {};
 
-// â”€â”€ Flex Message é€šçŸ¥æ¨¡æ¿ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ Flex Message ?šçŸ¥æ¨¡æ¿ ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcPrice, salonName) {
   const STATUS_MAP = {
-    confirm:  { label: "âœ… é ç´„ç¢ºèª",     color: "#06C755", alt: "æ‚¨çš„é ç´„å·²ç¢ºèª" },
-    reminder: { label: "â° é ç´„æé†’",     color: "#c8a97e", alt: "æ˜Žæ—¥é ç´„æé†’" },
-    cancel:   { label: "âŒ é ç´„å–æ¶ˆé€šçŸ¥", color: "#e05050", alt: "é ç´„å·²å–æ¶ˆ" },
-    test:     { label: "ðŸ”” æ¸¬è©¦é€šçŸ¥",     color: "#7a9aaa", alt: "é€™æ˜¯æ¸¬è©¦è¨Šæ¯" },
+    confirm:  { label: "???ç?ç¢ºè?",     color: "#06C755", alt: "?¨ç??ç?å·²ç¢ºèª? },
+    reminder: { label: "???ç??é?",     color: "#c8a97e", alt: "?Žæ—¥?ç??é?" },
+    cancel:   { label: "???ç??–æ??šçŸ¥", color: "#e05050", alt: "?ç?å·²å?æ¶? },
+    test:     { label: "?? æ¸¬è©¦?šçŸ¥",     color: "#7a9aaa", alt: "?™æ˜¯æ¸¬è©¦è¨Šæ¯" },
   };
   const st = STATUS_MAP[type] || STATUS_MAP.confirm;
 
   const rows = [
-    ["æœå‹™é …ç›®", `${svcName}ï¼ˆ${svcDuration}åˆ†é˜ï¼‰`],
-    ["è¨­è¨ˆå¸«",   stylistName],
-    ["é ç´„æ—¥æœŸ", booking.date],
-    ["é ç´„æ™‚é–“", booking.time],
-    ["è²»ç”¨",     svcPrice || "â€”"],
-    ...(booking.notes ? [["å‚™æ³¨", booking.notes]] : []),
+    ["?å??…ç›®", `${svcName}ï¼?{svcDuration}?†é?ï¼‰`],
+    ["è¨­è?å¸?,   stylistName],
+    ["?ç??¥æ?", booking.date],
+    ["?ç??‚é?", booking.time],
+    ["è²»ç”¨",     svcPrice || "??],
+    ...(booking.notes ? [["?™æ³¨", booking.notes]] : []),
   ];
 
   const footerMsg = type === "cancel"
-    ? "å¦‚éœ€é‡æ–°é ç´„ï¼Œè«‹é»žé¸ä¸‹æ–¹æŒ‰éˆ•"
+    ? "å¦‚é??æ–°?ç?ï¼Œè?é»žé¸ä¸‹æ–¹?‰é?"
     : type === "reminder"
-    ? "æ˜Žæ—¥è«‹æº–æ™‚åˆ°åº—ï¼ŒæœŸå¾…æ‚¨çš„åˆ°ä¾† ðŸ™"
-    : "æˆ‘å€‘å°‡ç›¡å¿«ç‚ºæ‚¨æœå‹™ï¼Œæœ‰ä»»ä½•å•é¡Œè«‹è¯ç¹«æˆ‘å€‘";
+    ? "?Žæ—¥è«‹æ??‚åˆ°åº—ï??Ÿå??¨ç??°ä? ??"
+    : "?‘å€‘å??¡å¿«?ºæ‚¨?å?ï¼Œæ?ä»»ä??é?è«‹è¯ç¹«æ???;
 
   return {
     type: "flex",
@@ -80,7 +78,7 @@ function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcP
         backgroundColor: "#0d0b08",
         paddingAll: "14px",
         contents: [
-          { type: "text", text: salonName || "JEæŸ“ç‡™å¿«å‰ªå±‹", size: "xxs", color: "#7a6a5a", flex: 1 },
+          { type: "text", text: salonName || "JE?“ç?å¿«å‰ªå±?, size: "xxs", color: "#7a6a5a", flex: 1 },
           { type: "text", text: st.label, size: "sm", color: st.color, align: "end", weight: "bold" },
         ],
       },
@@ -118,7 +116,7 @@ function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcP
             height: "sm",
             action: {
               type: "uri",
-              label: type === "cancel" ? "é‡æ–°é ç´„" : "æŸ¥çœ‹æˆ‘çš„é ç´„",
+              label: type === "cancel" ? "?æ–°?ç?" : "?¥ç??‘ç??ç?",
               uri: `https://line.me/R/ti/p/${LINE_OA_ID}`,
             },
           },
@@ -128,17 +126,17 @@ function buildFlexMessage(type, booking, svcName, stylistName, svcDuration, svcP
   };
 }
 
-// â”€â”€ LINE Notify åº—ä¸»é€šçŸ¥ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ LINE Notify åº—ä¸»?šçŸ¥ ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 async function notifyOwner(type, booking, svcName, stylistName) {
   if (!NOTIFY_TOKEN) return;
-  const icon = { confirm: "ðŸ“Œ", reminder: "â°", cancel: "âŒ", test: "ðŸ””" }[type] || "ðŸ“Œ";
-  const typeLabel = { confirm: "é ç´„ç¢ºèªå·²ç™¼é€", reminder: "æé†’å·²ç™¼é€", cancel: "å–æ¶ˆé€šçŸ¥å·²ç™¼é€", test: "æ¸¬è©¦é€šçŸ¥" }[type] || "é€šçŸ¥";
+  const icon = { confirm: "??", reminder: "??, cancel: "??, test: "??" }[type] || "??";
+  const typeLabel = { confirm: "?ç?ç¢ºè?å·²ç™¼??, reminder: "?é?å·²ç™¼??, cancel: "?–æ??šçŸ¥å·²ç™¼??, test: "æ¸¬è©¦?šçŸ¥" }[type] || "?šçŸ¥";
   const msg = [
     `\n${icon} ${typeLabel}`,
-    `é¡§å®¢ï¼š${booking.customerName}ï¼ˆ${booking.customerPhone}ï¼‰`,
-    `æœå‹™ï¼š${svcName} ï¼ ${stylistName}`,
-    `æ™‚é–“ï¼š${booking.date} ${booking.time}`,
-    ...(booking.lineId ? [`LINEï¼š${booking.lineId}`] : []),
+    `é¡§å®¢ï¼?{booking.customerName}ï¼?{booking.customerPhone}ï¼‰`,
+    `?å?ï¼?{svcName} ï¼?${stylistName}`,
+    `?‚é?ï¼?{booking.date} ${booking.time}`,
+    ...(booking.lineId ? [`LINEï¼?{booking.lineId}`] : []),
   ].join("\n");
 
   await axios.post(
@@ -153,27 +151,26 @@ async function notifyOwner(type, booking, svcName, stylistName) {
   );
 }
 
-// â”€â”€ POST /notify â€” ç™¼é€é€šçŸ¥çµ¦é¡§å®¢ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ POST /notify ???¼é€é€šçŸ¥çµ¦é¡§å®??€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 app.post("/notify", async (req, res) => {
-  const { type = "confirm", booking, svcName = "â€”", stylistName = "â€”", svcDuration = "â€”", svcPrice = "â€”", salonName = "JEæŸ“ç‡™å¿«å‰ªå±‹" } = req.body || {};
+  const { type = "confirm", booking, svcName = "??, stylistName = "??, svcDuration = "??, svcPrice = "??, salonName = "JE?“ç?å¿«å‰ªå±? } = req.body || {};
 
-  if (!booking) return res.status(400).json({ ok: false, msg: "ç¼ºå°‘ booking è³‡æ–™" });
-  if (!LINE_TOKEN) return res.status(500).json({ ok: false, msg: "ä¼ºæœå™¨æœªè¨­å®š LINE_CHANNEL_ACCESS_TOKEN" });
+  if (!booking) return res.status(400).json({ ok: false, msg: "ç¼ºå? booking è³‡æ?" });
+  if (!LINE_TOKEN) return res.status(500).json({ ok: false, msg: "ä¼ºæ??¨æœªè¨­å? LINE_CHANNEL_ACCESS_TOKEN" });
 
   const errors = [];
   let pushSent = false;
 
-  // â”€â”€ Push Flex Message çµ¦é¡§å®¢ â”€â”€
+  // ?€?€ Push Flex Message çµ¦é¡§å®??€?€
   if (booking.lineId) {
-    // lineId è‹¥ç‚º U é–‹é ­ 32 å­—å…ƒå‰‡ç‚º userIdï¼Œå¯ç›´æŽ¥æŽ¨æ’­
-    // è‹¥ç‚º @handle æˆ–ä¸€èˆ¬ IDï¼Œéœ€å…ˆå¾ž userIdCache æŸ¥æ‰¾
+    // lineId ?¥ç‚º U ?‹é ­ 32 å­—å??‡ç‚º userIdï¼Œå¯?´æŽ¥?¨æ’­
+    // ?¥ç‚º @handle ?–ä???IDï¼Œé??ˆå? userIdCache ?¥æ‰¾
     let lineUserId = null;
 
     if (/^U[0-9a-f]{32,33}$/i.test(booking.lineId)) {
       lineUserId = booking.lineId;
     } else {
-      // å˜—è©¦å¾ž cache åæŸ¥ï¼ˆä¾ displayName æˆ– lineId å°æ‡‰ï¼‰
-      const found = Object.entries(userIdCache).find(([, v]) =>
+      // ?—è©¦å¾?cache ?æŸ¥ï¼ˆä? displayName ??lineId å°æ?ï¼?      const found = Object.entries(userIdCache).find(([, v]) =>
         v.lineId === booking.lineId || v.displayName === booking.lineId
       );
       if (found) lineUserId = found[0];
@@ -192,38 +189,37 @@ app.post("/notify", async (req, res) => {
         pushSent = true;
       } catch (e) {
         const errMsg = e.response?.data?.message || e.message;
-        errors.push(`Push å¤±æ•—: ${errMsg}`);
+        errors.push(`Push å¤±æ?: ${errMsg}`);
         console.error("[Push Error]", errMsg);
       }
     } else {
-      errors.push(`lineIdã€Œ${booking.lineId}ã€éž userId æ ¼å¼ï¼Œè«‹å¼•å°Žé¡§å®¢åŠ å…¥å®˜æ–¹å¸³è™Ÿå¾Œè¼¸å…¥ã€ŒæŸ¥è©¢æˆ‘çš„é ç´„ã€å–å¾— userId`);
+      errors.push(`lineId??{booking.lineId}?é? userId ?¼å?ï¼Œè?å¼•å?é¡§å®¢? å…¥å®˜æ–¹å¸³è?å¾Œè¼¸?¥ã€ŒæŸ¥è©¢æ??„é?ç´„ã€å?å¾?userId`);
     }
   }
 
-  // â”€â”€ Notify åº—ä¸» â”€â”€
+  // ?€?€ Notify åº—ä¸» ?€?€
   try {
     await notifyOwner(type, booking, svcName, stylistName);
   } catch (e) {
-    errors.push(`åº—ä¸»é€šçŸ¥å¤±æ•—: ${e.message}`);
+    errors.push(`åº—ä¸»?šçŸ¥å¤±æ?: ${e.message}`);
     console.error("[Notify Error]", e.message);
   }
 
   return res.json({
     ok: errors.length === 0 || pushSent,
     pushSent,
-    msg: errors.length > 0 ? errors.join(" / ") : "é€šçŸ¥å·²ç™¼é€",
+    msg: errors.length > 0 ? errors.join(" / ") : "?šçŸ¥å·²ç™¼??,
   });
 });
 
-// â”€â”€ POST /webhook â€” æŽ¥æ”¶ LINE äº‹ä»¶ï¼Œæ•æ‰ userId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ POST /webhook ???¥æ”¶ LINE äº‹ä»¶ï¼Œæ???userId ?€?€?€?€?€?€?€?€?€?€
 app.post("/webhook", async (req, res) => {
-  // âœ… å¿…é ˆå…ˆå›ž 200ï¼Œå¦å‰‡ LINE æœƒåˆ¤å®šå¤±æ•—ä¸¦é‡è©¦
+  // ??å¿…é??ˆå? 200ï¼Œå¦??LINE ?ƒåˆ¤å®šå¤±?—ä¸¦?è©¦
   res.status(200).end();
 
   try {
-    // æ‰‹å‹•é©—è­‰ x-line-signatureï¼ˆrawBody ç‚º Bufferï¼‰
-    const signature = req.headers["x-line-signature"];
-    const rawBody   = req.body; // express.raw() ç”¢ç”Ÿçš„ Buffer
+    // ?‹å?é©—è? x-line-signatureï¼ˆrawBody ??Bufferï¼?    const signature = req.headers["x-line-signature"];
+    const rawBody   = req.body; // express.raw() ?¢ç???Buffer
 
     if (LINE_SECRET && signature) {
       const hash = crypto
@@ -231,7 +227,7 @@ app.post("/webhook", async (req, res) => {
         .update(rawBody)
         .digest("base64");
       if (hash !== signature) {
-        console.warn("[Webhook] signature é©—è­‰å¤±æ•—ï¼Œç•¥éŽ");
+        console.warn("[Webhook] signature é©—è?å¤±æ?ï¼Œç•¥??);
         return;
       }
     }
@@ -243,7 +239,7 @@ app.post("/webhook", async (req, res) => {
       const userId = event.source?.userId;
       if (!userId) continue;
 
-      // å–å¾—ä¸¦å„²å­˜ profile
+      // ?–å?ä¸¦å„²å­?profile
       try {
         const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: LINE_TOKEN });
         const profile = await client.getProfile(userId);
@@ -258,15 +254,14 @@ app.post("/webhook", async (req, res) => {
         console.error("[Profile Error]", e.message);
       }
 
-      // å›žæ‡‰ã€ŒæŸ¥è©¢æˆ‘çš„é ç´„ã€æŒ‡ä»¤
-      if (event.type === "message" && event.message?.type === "text" && event.message.text === "æŸ¥è©¢æˆ‘çš„é ç´„") {
+      // ?žæ??ŒæŸ¥è©¢æ??„é?ç´„ã€æ?ä»?      if (event.type === "message" && event.message?.type === "text" && event.message.text === "?¥è©¢?‘ç??ç?") {
         try {
           const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: LINE_TOKEN });
           await client.replyMessage({
             replyToken: event.replyToken,
             messages: [{
               type: "text",
-              text: `æ‚¨çš„ LINE userIdï¼š\n${userId}\n\nè«‹å°‡æ­¤ ID æä¾›çµ¦åº—å®¶ï¼Œå³å¯æŽ¥æ”¶é ç´„æŽ¨æ’­é€šçŸ¥ã€‚\n\né ç´„è«‹å‰å¾€ï¼š\nhttps://je-booking.vercel.app`,
+              text: `?¨ç? LINE userIdï¼š\n${userId}\n\nè«‹å?æ­?ID ?ä?çµ¦å?å®¶ï??³å¯?¥æ”¶?ç??¨æ’­?šçŸ¥?‚\n\n?ç?è«‹å?å¾€ï¼š\nhttps://je-booking.vercel.app`,
             }],
           });
         } catch (e) {
@@ -275,16 +270,16 @@ app.post("/webhook", async (req, res) => {
       }
     }
   } catch (e) {
-    // ä¸ throwï¼res å·²å›žäº† 200ï¼Œé€™è£¡åªè¨˜éŒ„ log
+    // ä¸?throwï¼res å·²å?äº?200ï¼Œé€™è£¡?ªè???log
     console.error("[Webhook Error]", e.message);
   }
 });
 
-// â”€â”€ GET /health â€” Railway å¥åº·æª¢æŸ¥ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ GET /health ??Railway ?¥åº·æª¢æŸ¥ ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 app.get("/health", (_req, res) => {
   res.json({
     status:          "ok",
-    salonName:       "JEæŸ“ç‡™å¿«å‰ªå±‹",
+    salonName:       "JE?“ç?å¿«å‰ªå±?,
     lineOaId:        LINE_OA_ID,
     hasLineToken:    !!LINE_TOKEN,
     hasLineSecret:   !!LINE_SECRET,
@@ -294,7 +289,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// â”€â”€ GET /users â€” æŸ¥è©¢å·²æ•æ‰çš„ userId åˆ—è¡¨ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ GET /users ???¥è©¢å·²æ??‰ç? userId ?—è¡¨ ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 app.get("/users", (_req, res) => {
   res.json({
     count: Object.keys(userIdCache).length,
@@ -302,12 +297,12 @@ app.get("/users", (_req, res) => {
   });
 });
 
-// â”€â”€ å•Ÿå‹• â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ?€?€ ?Ÿå? ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`[JE line-server] running on port ${PORT}`);
-  console.log(`  LINE Token : ${LINE_TOKEN ? "âœ“ set" : "âœ— missing"}`);
-  console.log(`  LINE Secret: ${LINE_SECRET ? "âœ“ set" : "âœ— missing"}`);
-  console.log(`  Notify     : ${NOTIFY_TOKEN ? "âœ“ set" : "âœ— not set (optional)"}`);
+  console.log(`  LINE Token : ${LINE_TOKEN ? "??set" : "??missing"}`);
+  console.log(`  LINE Secret: ${LINE_SECRET ? "??set" : "??missing"}`);
+  console.log(`  Notify     : ${NOTIFY_TOKEN ? "??set" : "??not set (optional)"}`);
   console.log(`  OA ID      : ${LINE_OA_ID}`);
 });
