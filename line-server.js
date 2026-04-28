@@ -134,7 +134,7 @@ async function getAllBookings() {
 // ══════════════════════════════════════════════════════════
 //  LINE Push 工具
 // ══════════════════════════════════════════════════════════
-function httpPost(hostname, path, body, contentType = "application/json") {
+function httpPost(hostname, path, body, contentType = "application/json", extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const buf  = typeof body === "string" ? Buffer.from(body) : Buffer.from(JSON.stringify(body));
     const opts = {
@@ -142,8 +142,7 @@ function httpPost(hostname, path, body, contentType = "application/json") {
       headers: {
         "Content-Type":   contentType,
         "Content-Length": buf.length,
-        ...(contentType === "application/json" && TOKEN
-          ? { Authorization: `Bearer ${TOKEN}` } : {}),
+        ...extraHeaders,
       },
     };
     const req = https.request(opts, res => {
@@ -158,17 +157,21 @@ function httpPost(hostname, path, body, contentType = "application/json") {
 }
 
 function pushLine(userId, messages) {
-  return httpPost("api.line.me", "/v2/bot/message/push", {
-    to: userId,
-    messages: Array.isArray(messages) ? messages : [messages],
-  });
+  if (!TOKEN) { console.error("[pushLine] LINE_CHANNEL_ACCESS_TOKEN 未設定"); return Promise.resolve(); }
+  return httpPost("api.line.me", "/v2/bot/message/push",
+    { to: userId, messages: Array.isArray(messages) ? messages : [messages] },
+    "application/json",
+    { Authorization: `Bearer ${TOKEN}` }
+  ).then(res => { console.log(`[pushLine→${userId.slice(-6)}]`, res.slice(0,120)); return res; });
 }
 
 function replyLine(replyToken, messages) {
-  return httpPost("api.line.me", "/v2/bot/message/reply", {
-    replyToken,
-    messages: Array.isArray(messages) ? messages : [messages],
-  });
+  if (!TOKEN) { console.error("[replyLine] LINE_CHANNEL_ACCESS_TOKEN 未設定"); return Promise.resolve(); }
+  return httpPost("api.line.me", "/v2/bot/message/reply",
+    { replyToken, messages: Array.isArray(messages) ? messages : [messages] },
+    "application/json",
+    { Authorization: `Bearer ${TOKEN}` }
+  );
 }
 
 // ── 新預約 Flex Message ──────────────────────────────────
@@ -260,9 +263,16 @@ app.post("/notify-new", async (req, res) => {
   try {
     const { booking, svcName, stylistName, cancelUrl } = req.body;
     if (!booking) return res.status(400).json({ error: "booking required" });
+    if (!TOKEN)   return res.status(500).json({ error: "LINE_CHANNEL_ACCESS_TOKEN 未設定" });
+    if (OWNER_IDS.length === 0) return res.status(500).json({ error: "OWNER_USER_IDS 未設定或為空" });
+
+    console.log(`[notify-new] 新預約 ${booking.customerName} ${booking.date} ${booking.time} → 推送給 ${OWNER_IDS.length} 位店主`);
     const msg = buildNewBookingFlex(booking, svcName, stylistName, cancelUrl);
-    await Promise.all(OWNER_IDS.map(uid => pushLine(uid, msg)));
-    res.json({ ok: true });
+    const results = await Promise.allSettled(OWNER_IDS.map(uid => pushLine(uid, msg)));
+    results.forEach((r, i) => {
+      if (r.status === "rejected") console.error(`[notify-new] 推送給 ${OWNER_IDS[i]} 失敗:`, r.reason);
+    });
+    res.json({ ok: true, sent: OWNER_IDS.length });
   } catch (e) {
     console.error("[notify-new]", e.message);
     res.status(500).json({ error: e.message });
@@ -276,6 +286,10 @@ app.post("/notify-cancel", async (req, res) => {
   try {
     const { booking } = req.body;
     if (!booking) return res.status(400).json({ error: "booking required" });
+    if (!TOKEN)   return res.status(500).json({ error: "LINE_CHANNEL_ACCESS_TOKEN 未設定" });
+    if (OWNER_IDS.length === 0) return res.status(500).json({ error: "OWNER_USER_IDS 未設定或為空" });
+
+    console.log(`[notify-cancel] 取消預約 ${booking.customerName} ${booking.date}`);
     const msg = buildCancelFlex(booking);
     await Promise.all(OWNER_IDS.map(uid => pushLine(uid, msg)));
     res.json({ ok: true });
